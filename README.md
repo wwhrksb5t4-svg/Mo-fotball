@@ -1,110 +1,76 @@
-# Mo-football
+# Mo-football ⚽
 
-Mo-football is a Telegram bot starter for football match analysis. It can receive a match image, extract text via OCR, save the image and extracted data, and then query a football API to build a basic statistical probability report.
+Telegram bot starter for football match analysis. It accepts match images, extracts visible text using OCR, saves images and analyses, and generates a basic probability report from historical match results provided by football-data.org.
 
-The project is designed as a starting point for a football analytics bot and is ready to be deployed on Railway.
-
-## Features
-- Telegram bot with `/start`, `/help`, and `/analyze`
-- Image upload support
-- OCR text extraction from uploaded images
-- Football data lookup using the football-data API
-- Simple statistical probability report for match outcomes
-- SQLite storage for uploaded images and saved analyses
-- Dockerfile / Railway deployment support
-
-## Tech stack
-- Python 3.11+
-- FastAPI
-- python-telegram-bot
-- OCR: Tesseract + Pillow + pytesseract
-- HTTP client: httpx
-- Data storage: SQLite
-
-## Local setup
-
-1. Create a virtual environment:
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate
-   ```
-
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. Copy the example environment file:
-   ```bash
-   cp .env.example .env
-   ```
-
-4. Fill in the required values in `.env`.
-
-5. Install Tesseract OCR on your machine.
-   - Ubuntu/Debian:
-     ```bash
-     sudo apt update && sudo apt install tesseract-ocr
-     ```
-   - macOS:
-     ```bash
-     brew install tesseract
-     ```
-   - Windows: install Tesseract and ensure it is on PATH.
-
-6. Start the app:
-   ```bash
-   uvicorn main:app --host 0.0.0.0 --port 8000
-   ```
-
-## Environment variables
-
-The project expects these variables in `.env`:
-
-```env
-TELEGRAM_BOT_TOKEN=your_token_here
-TELEGRAM_WEBHOOK_URL=https://your-domain.example.com/webhook
-FOOTBALL_DATA_TOKEN=your_football_data_token
-DATABASE_PATH=data/bot.db
-OCR_LANG=eng
-```
+> Predictions are statistical estimates only. They are not guaranteed outcomes or profit, and the current model does not account for injuries, lineups, or betting-market odds.
 
 ## Bot commands
 
-- `/start` — show welcome message
-- `/help` — show usage instructions
-- `/analyze PL|Arsenal|Chelsea` — analyze a match using the competition code and team names
+- `/start` — welcome and usage
+- `/help` — help
+- `/analyze PL|Arsenal|Chelsea` — analyze a fixture by competition code and team names
+- Send a photo — save the image and return OCR text; verify team names manually before analysis
 
-## Supported competition codes
-- PL
-- PD
-- BL1
-- SA
-- FL1
+Supported competition codes: `PL`, `PD`, `BL1`, `SA`, `FL1`.
 
-## Deployment on Railway
+## Required credentials
 
-1. Push this repo to GitHub.
-2. Create a new Railway project and connect it to the repo.
-3. Set these variables in Railway:
-   - `TELEGRAM_BOT_TOKEN`
-   - `TELEGRAM_WEBHOOK_URL`
-   - `FOOTBALL_DATA_TOKEN`
-   - `DATABASE_PATH=data/bot.db`
-   - `OCR_LANG=eng`
-4. Use the start command:
-   ```bash
-   uvicorn main:app --host 0.0.0.0 --port $PORT
-   ```
+- `TELEGRAM_BOT_TOKEN`: create a bot with [@BotFather](https://t.me/BotFather).
+- `FOOTBALL_DATA_TOKEN`: API token from [football-data.org](https://www.football-data.org/).
 
-5. Make sure Telegram can reach your webhook endpoint.
+Never commit `.env` or send tokens in chat.
 
-## Notes
+## Run locally
 
-- This bot is a starter analytics project.
-- The analysis is based on basic statistical logic and historical team performance; it is not a guarantee of profit or a guaranteed prediction outcome.
-- The bot stores uploaded photos and analyses locally in the `data/` folder and the SQLite database.
+Requires Python 3.11+ and Tesseract OCR installed.
+
+```bash
+python -m venv .venv
+# Windows PowerShell: .venv\Scripts\Activate.ps1
+# macOS/Linux:
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+```
+
+Edit `.env` and set your Telegram and football-data tokens. For local webhook testing, use a public HTTPS tunnel and set `TELEGRAM_WEBHOOK_URL` to its `/webhook` URL. Start the server:
+
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+The local health check is `http://localhost:8000/health`. Telegram webhooks require a publicly reachable HTTPS address; localhost alone will not receive Telegram updates.
+
+## Deploy on Railway
+
+1. Create a Railway project and deploy this GitHub repository.
+2. The included Dockerfile installs Tesseract and starts Uvicorn using Railway's `$PORT`.
+3. Generate a public domain for the service, then set the variables below in Railway. `TELEGRAM_WEBHOOK_URL` must be the full URL ending in `/webhook`.
+4. Add a Railway Volume mounted at `/app/data` so SQLite data and uploaded images survive redeployments.
+5. Redeploy after setting the variables. Check `/health` and the deployment logs, then send `/start` to your bot.
+
+Required Railway variables:
+
+```text
+TELEGRAM_BOT_TOKEN=...                 # from BotFather
+FOOTBALL_DATA_TOKEN=...                # from football-data.org
+TELEGRAM_WEBHOOK_URL=https://YOUR-DOMAIN/webhook
+DATABASE_PATH=/app/data/bot.db
+PHOTOS_DIR=/app/data/photos
+OCR_LANG=eng
+TELEGRAM_WEBHOOK_SECRET=...            # optional; use a random -safe string
+```
+
+A suitable start command is already configured by the Dockerfile. If overriding it, use:
+
+```bash
+uvicorn main:app --host 0.0.0.0 --port $PORT
+```
+
+## Storage and OCR
+
+The default database is SQLite. For Railway, mount persistent storage at `/app/data` and use the paths above. OCR defaults to English (`OCR_LANG=eng`). Arabic OCR requires the Arabic Tesseract language data to be installed in the image and `OCR_LANG=eng+ara`; the default image only installs the English language pack.
 
 ## License
 
-This project is provided as a starter template and can be adapted freely for personal or commercial work.
+Starter software; adapt as needed. Check the terms of any data provider you use.
