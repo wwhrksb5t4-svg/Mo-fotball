@@ -3,6 +3,7 @@ import hmac
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from telegram import Update
+from telegram.error import InvalidToken
 
 from app.config import TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET, TELEGRAM_WEBHOOK_URL
 from app.db import init_db
@@ -13,7 +14,15 @@ from app.telegram_bot import build_application
 async def lifespan(app: FastAPI):
     init_db()
     telegram_app = build_application()
-    await telegram_app.initialize()
+    try:
+        await telegram_app.initialize()
+    except InvalidToken:
+        # Do not let the Telegram library's exception print the configured token.
+        raise RuntimeError(
+            "Telegram rejected TELEGRAM_BOT_TOKEN. In Railway > Variables, replace "
+            "the placeholder with the current token from @BotFather, then redeploy."
+        ) from None
+
     if TELEGRAM_WEBHOOK_URL:
         await telegram_app.bot.set_webhook(
             url=TELEGRAM_WEBHOOK_URL,

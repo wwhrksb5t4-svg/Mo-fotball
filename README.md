@@ -23,11 +23,11 @@ Never commit `.env` or send tokens in chat.
 ## Deploy on Railway
 
 1. Create a Railway project and deploy this GitHub repository.
-2. The included Dockerfile installs Python dependencies and Arabic/English Tesseract language data, then starts the web service on Railway's `$PORT`.
+2. The Dockerfile installs Python dependencies and Arabic/English Tesseract language data, then starts Uvicorn using Railway's `$PORT`.
 3. Generate a public domain for the service.
 4. Add the Railway variables below. Set `TELEGRAM_WEBHOOK_URL` to the generated domain with `/webhook` appended.
 5. Add a Railway Volume mounted at `/app/data` so the SQLite database and uploaded images survive redeployments.
-6. Redeploy after setting variables and the volume. Check `/health`, then send `/start` to your bot.
+6. Redeploy after setting the variables and volume. Check `/health`, then send `/start` to your bot.
 
 Required Railway variables:
 
@@ -46,6 +46,10 @@ The Dockerfile already provides the start command. If you override it, use:
 ```bash
 uvicorn main:app --host 0.0.0.0 --port $PORT
 ```
+
+## Fixing an invalid Telegram token
+
+If Railway logs show `InvalidToken` or `The token your_telegram_token_here was rejected`, the service is still using the example placeholder. In Railway, open the service's **Variables**, set `TELEGRAM_BOT_TOKEN` to the actual token from @BotFather (not the example text), save, and redeploy. Do not paste the token into GitHub or chat. The app now rejects known placeholder values with a clear message and suppresses Telegram's token-bearing exception text.
 
 ## Local run
 

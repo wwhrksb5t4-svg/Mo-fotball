@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from telegram import Update
+from telegram.error import InvalidToken
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 from app.analytics import best_team_match, calculate_probabilities, team_averages
@@ -138,9 +139,19 @@ async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def build_application() -> Application:
     if not TELEGRAM_BOT_TOKEN:
         raise RuntimeError("TELEGRAM_BOT_TOKEN is not configured.")
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_cmd))
-    application.add_handler(CommandHandler("analyze", analyze_command))
-    application.add_handler(MessageHandler(filters.PHOTO, photo_handler))
-    return application
+    if TELEGRAM_BOT_TOKEN.lower() in {
+        "your_telegram_token_here",
+        "your_token_here",
+        "replace_me",
+        "changeme",
+    } or "your_" in TELEGRAM_BOT_TOKEN.lower():
+        raise RuntimeError(
+            "TELEGRAM_BOT_TOKEN is still a placeholder. Set the real token from @BotFather "
+            "in Railway Variables and redeploy."
+        )
+
+    return (
+        Application.builder()
+        .token(TELEGRAM_BOT_TOKEN)
+        .build()
+    )
