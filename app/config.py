@@ -20,28 +20,21 @@ def resolve_webhook_url() -> str:
     value = TELEGRAM_WEBHOOK_URL
     if not value:
         domain = os.getenv("RAILWAY_PUBLIC_DOMAIN", "").strip()
-        if not domain:
+        if domain:
+            value = domain if "://" in domain else f"https://{domain}"
+        else:
             static_url = os.getenv("RAILWAY_STATIC_URL", "").strip()
             if static_url:
                 value = static_url if "://" in static_url else f"https://{static_url}"
-        elif "://" in domain:
-            value = domain
-        else:
-            value = f"https://{domain}"
-
-    if not value:
-        raise RuntimeError(
-            "Webhook URL is missing: set TELEGRAM_WEBHOOK_URL to your public Railway URL "
-            "ending in /webhook, or enable a Railway public domain."
-        )
+        if value and not urlparse(value).path:
+            value = value.rstrip("/") + "/webhook"
 
     parsed = urlparse(value)
     if parsed.scheme != "https" or not parsed.netloc or parsed.path.rstrip("/") != "/webhook" or parsed.query or parsed.fragment:
-        raise RuntimeError("Webhook URL must be HTTPS and end exactly with /webhook.")
+        raise RuntimeError(
+            "Set TELEGRAM_WEBHOOK_URL to your public Railway HTTPS address ending in /webhook."
+        )
 
-    if TELEGRAM_WEBHOOK_SECRET and (
-        not re.fullmatch(r"[A-Za-z0-9_-]{1,256}", TELEGRAM_WEBHOOK_SECRET)
-    ):
-        raise RuntimeError("TELEGRAM_WEBHOOK_SECRET must be 1-256 letters, numbers, underscores, or hyphens.")
-
+    if TELEGRAM_WEBHOOK_SECRET and not re.fullmatch(r"[A-Za-z0-9_-]{1,256}", TELEGRAM_WEBHOOK_SECRET):
+        raise RuntimeError("TELEGRAM_WEBHOOK_SECRET must use only letters, numbers, underscores, or hyphens.")
     return value.rstrip("/")

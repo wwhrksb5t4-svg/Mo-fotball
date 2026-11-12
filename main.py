@@ -11,11 +11,12 @@ from app.db import init_db
 from app.telegram_bot import build_application
 
 logging.basicConfig(level=logging.INFO)
+# python-telegram-bot uses httpx; its INFO request logs include the bot token in URL paths.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("mo_football")
 
 
 async def telegram_error_handler(update: object, context) -> None:
-    # Do not log request payloads or credentials; only the exception details.
     logger.error("Telegram update handler failed", exc_info=context.error)
 
 
@@ -25,15 +26,13 @@ async def lifespan(app: FastAPI):
     webhook_url = resolve_webhook_url()
     telegram_app = build_application()
     initialized = started = False
-
     try:
         try:
             await telegram_app.initialize()
             initialized = True
         except InvalidToken:
             raise RuntimeError(
-                "Telegram rejected TELEGRAM_BOT_TOKEN. Replace it with the current token "
-                "from @BotFather in Railway Variables, then redeploy."
+                "Telegram rejected TELEGRAM_BOT_TOKEN. Replace it with a current token from @BotFather."
             ) from None
 
         telegram_app.add_error_handler(telegram_error_handler)
@@ -41,10 +40,9 @@ async def lifespan(app: FastAPI):
             url=webhook_url,
             secret_token=TELEGRAM_WEBHOOK_SECRET or None,
             allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=False,
         )
-        webhook_info = await telegram_app.bot.get_webhook_info()
-        if webhook_info.url != webhook_url:
+        info = await telegram_app.bot.get_webhook_info()
+        if info.url != webhook_url:
             raise RuntimeError("Telegram did not confirm the configured webhook URL.")
 
         await telegram_app.start()
@@ -68,11 +66,7 @@ app = FastAPI(title="Mo-football", lifespan=lifespan)
 @app.get("/health")
 async def health(request: Request) -> dict[str, str | bool]:
     ready = bool(getattr(request.app.state, "webhook_ready", False))
-    return {
-        "status": "ok" if ready else "starting",
-        "service": "Mo-football",
-        "telegram_webhook_ready": ready,
-    }
+    return {"status": "ok" if ready else "starting", "service": "Mo-football", "telegram_webhook_ready": ready}
 
 
 @app.post("/webhook")
@@ -88,7 +82,6 @@ async def webhook(
     telegram_app = getattr(request.app.state, "telegram_app", None)
     if telegram_app is None:
         raise HTTPException(status_code=503, detail="Telegram bot is not ready")
-
     try:
         payload = await request.json()
         update = Update.de_json(payload, telegram_app.bot)
