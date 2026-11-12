@@ -1,56 +1,57 @@
 # Mo-football ⚽
 
-Telegram bot starter for football match analysis. It accepts match images, extracts visible Arabic and English text using OCR, saves images and analyses, and generates a basic probability report from historical match results provided by football-data.org.
+Telegram bot for football match analysis. Accepts match images, extracts Arabic/English OCR text, saves records, and reports simple probability estimates from football-data.org historical results.
 
-> Predictions are statistical estimates only. They are not guaranteed outcomes or profit, and the current model does not account for injuries, lineups, or betting-market odds.
+## Important
+The output is statistical and uncertain, not a guaranteed prediction or profit. Current estimates do not account for injuries, confirmed lineups, or bookmaker prices.
 
-## Bot commands
+## Setup on Railway
 
-- `/start` — welcome and usage
-- `/help` — help
-- `/analyze PL|Arsenal|Chelsea` — analyze a fixture by competition code and team names
-- Send a photo — save the image and return OCR text; verify team names manually before analysis
+1. Deploy this repository as a Railway service using the included Dockerfile.
+2. Generate a public HTTPS domain in the service's Networking settings.
+3. Set `TELEGRAM_BOT_TOKEN` to the real token from @BotFather.
+4. Set `TELEGRAM_WEBHOOK_URL` to `https://YOUR-PUBLIC-DOMAIN/webhook`. Alternatively, enable Railway's public domain variable `RAILWAY_PUBLIC_DOMAIN`; the app will construct the `/webhook` endpoint automatically.
+5. Set `TELEGRAM_WEBHOOK_SECRET` to a random 1-256 character string containing only letters, numbers, `_` or `-`. It must be identical in the service variable throughout deployment. You may leave it blank if you do not need the extra check.
+6. For durable storage, add a Railway PostgreSQL service and reference its connection URL in the bot service's `DATABASE_URL` variable (Railway variable reference to Postgres `DATABASE_URL`). The app creates its tables and indexes on startup. If not configured, it uses SQLite; mount a Railway Volume at `/app/data` and set `DATABASE_PATH=/app/data/bot.db`.
+7. Mount a Railway Volume at `/app/data` for uploaded image files, and set `PHOTOS_DIR=/app/data/photos`. PostgreSQL stores image paths/OCR records; images themselves are stored on the volume.
+8. Redeploy. Visit `/health`; expect `telegram_webhook_ready: true`. Then send `/start` to the bot.
 
-Supported competition codes: `PL`, `PD`, `BL1`, `SA`, `FL1`.
-
-## Required credentials
-
-- `TELEGRAM_BOT_TOKEN`: create a bot with [@BotFather](https://t.me/BotFather).
-- `FOOTBALL_DATA_TOKEN`: API token from [football-data.org](https://www.football-data.org/). Needed for `/analyze`, not for startup.
-
-Never commit `.env` or send tokens in chat.
-
-## Deploy on Railway
-
-1. Deploy this GitHub repository as a Railway service. The included Dockerfile installs Python and Arabic/English Tesseract OCR, then starts Uvicorn on Railway's `$PORT`.
-2. Generate a public HTTPS domain for the service.
-3. Set `TELEGRAM_BOT_TOKEN` from BotFather and `TELEGRAM_WEBHOOK_URL` to `https://YOUR-DOMAIN/webhook` in the service Variables.
-4. Add a Railway Volume mounted at `/app/data` so the SQLite database and uploaded images survive redeployments.
-5. Set the variables below and redeploy. Check `/health`; it should return `telegram_webhook_ready: true`, then message the bot with `/start`.
-
-Required Railway variables:
+Required/recommended Railway variables:
 
 ```text
-TELEGRAM_BOT_TOKEN=...                 # from BotFather
-TELEGRAM_WEBHOOK_URL=https://YOUR-DOMAIN/webhook
-FOOTBALL_DATA_TOKEN=...                # needed for match analysis
-TELEGRAM_WEBHOOK_SECRET=...             # recommended; random letters/numbers/_/-
-DATABASE_PATH=/app/data/bot.db
+TELEGRAM_BOT_TOKEN=...                 # required
+TELEGRAM_WEBHOOK_URL=https://DOMAIN/webhook  # required unless Railway public domain is enabled
+TELEGRAM_WEBHOOK_SECRET=...            # optional but recommended
+FOOTBALL_DATA_TOKEN=...                # needed only for /analyze
+DATABASE_URL=${{Postgres.DATABASE_URL}} # recommended; add Railway PostgreSQL first
+DATABASE_PATH=/app/data/bot.db         # SQLite fallback
 PHOTOS_DIR=/app/data/photos
 OCR_LANG=eng+ara
 ```
 
-The included Dockerfile provides the start command. If overriding it, use:
+The included Dockerfile installs Tesseract English and Arabic language data and starts Uvicorn on Railway's `$PORT`. Do not add a competing polling process: the app uses Telegram webhooks.
 
-```bash
-uvicorn main:app --host 0.0.0.0 --port $PORT
-```
+## Bot usage
 
-The service validates that the webhook URL is HTTPS and ends in `/webhook`; startup fails with a clear message if it is missing or malformed. If Telegram rejects the token, replace it in Railway Variables with the current BotFather token and redeploy. Never paste secrets into GitHub or chat.
+- `/start` — greeting
+- `/help` — usage information
+- `/analyze PL|Arsenal|Chelsea` — request match analysis; requires a valid `FOOTBALL_DATA_TOKEN`
+- Send a photo — save it and return extracted text. OCR does not identify/verify fixtures automatically.
+
+Supported competition codes: `PL`, `PD`, `BL1`, `SA`, `FL1`.
+
+## Diagnose no response
+
+- Check `/health`; `telegram_webhook_ready` must be `true`.
+- If it stays false or the deployment restarts, inspect Railway logs for webhook URL, credential, or database connection errors.
+- Ensure the URL is public HTTPS and ends in `/webhook`.
+- If a webhook secret is set, do not change it between app configuration and Telegram webhook registration; this app registers the configured value on startup.
+- After deploy, send `/start` and inspect logs for `Mo-football webhook configured and ready`.
+- Never post bot tokens, database URLs, or API keys in chat or commit them to GitHub.
 
 ## Local run
 
-Requires Python 3.11+ and Tesseract OCR with English and Arabic language data.
+Requires Python 3.11+, Tesseract with `eng` and `ara` language packs, and a public HTTPS tunnel for Telegram webhook delivery.
 
 ```bash
 python -m venv .venv
@@ -61,16 +62,4 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Fill in `.env`. Telegram requires a public HTTPS webhook, so local testing needs an HTTPS tunnel; set `TELEGRAM_WEBHOOK_URL` to its public `/webhook` URL. Then run:
-
-```bash
-uvicorn main:app --host 0.0.0.0 --port 8000
-```
-
-`/health` reports whether webhook startup completed. A local server without a public HTTPS tunnel cannot receive Telegram messages.
-
-## Storage and analysis notes
-
-The default database and photos are stored below `data/`. On Railway, mount persistent storage at `/app/data` and set the paths above. Image OCR extracts text only; it does not automatically verify fixtures. Confirm team names and run `/analyze` yourself.
-
-The model uses a simple Poisson estimate from recent goals. It is not a professional predictive model, does not include injuries or lineups, and does not guarantee a match result or profit. Respect data-provider terms and local laws.
+Fill in credentials and run `uvicorn main:app --host 0.0.0.0 --port 8000`. Configure the tunnel's public HTTPS `/webhook` URL in `TELEGRAM_WEBHOOK_URL`.
