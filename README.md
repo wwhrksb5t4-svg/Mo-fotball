@@ -16,40 +16,37 @@ Supported competition codes: `PL`, `PD`, `BL1`, `SA`, `FL1`.
 ## Required credentials
 
 - `TELEGRAM_BOT_TOKEN`: create a bot with [@BotFather](https://t.me/BotFather).
-- `FOOTBALL_DATA_TOKEN`: API token from [football-data.org](https://www.football-data.org/).
+- `FOOTBALL_DATA_TOKEN`: API token from [football-data.org](https://www.football-data.org/). Needed for `/analyze`, not for startup.
 
 Never commit `.env` or send tokens in chat.
 
 ## Deploy on Railway
 
-1. Create a Railway project and deploy this GitHub repository.
-2. The Dockerfile installs Python dependencies and Arabic/English Tesseract language data, then starts Uvicorn using Railway's `$PORT`.
-3. Generate a public domain for the service.
-4. Add the Railway variables below. Set `TELEGRAM_WEBHOOK_URL` to the generated domain with `/webhook` appended.
-5. Add a Railway Volume mounted at `/app/data` so the SQLite database and uploaded images survive redeployments.
-6. Redeploy after setting the variables and volume. Check `/health`, then send `/start` to your bot.
+1. Deploy this GitHub repository as a Railway service. The included Dockerfile installs Python and Arabic/English Tesseract OCR, then starts Uvicorn on Railway's `$PORT`.
+2. Generate a public HTTPS domain for the service.
+3. Set `TELEGRAM_BOT_TOKEN` from BotFather and `TELEGRAM_WEBHOOK_URL` to `https://YOUR-DOMAIN/webhook` in the service Variables.
+4. Add a Railway Volume mounted at `/app/data` so the SQLite database and uploaded images survive redeployments.
+5. Set the variables below and redeploy. Check `/health`; it should return `telegram_webhook_ready: true`, then message the bot with `/start`.
 
 Required Railway variables:
 
 ```text
 TELEGRAM_BOT_TOKEN=...                 # from BotFather
-FOOTBALL_DATA_TOKEN=...                # from football-data.org
 TELEGRAM_WEBHOOK_URL=https://YOUR-DOMAIN/webhook
-TELEGRAM_WEBHOOK_SECRET=...             # optional random string using letters, numbers, _ or -
+FOOTBALL_DATA_TOKEN=...                # needed for match analysis
+TELEGRAM_WEBHOOK_SECRET=...             # recommended; random letters/numbers/_/-
 DATABASE_PATH=/app/data/bot.db
 PHOTOS_DIR=/app/data/photos
 OCR_LANG=eng+ara
 ```
 
-The Dockerfile already provides the start command. If you override it, use:
+The included Dockerfile provides the start command. If overriding it, use:
 
 ```bash
 uvicorn main:app --host 0.0.0.0 --port $PORT
 ```
 
-## Fixing an invalid Telegram token
-
-If Railway logs show `InvalidToken` or `The token your_telegram_token_here was rejected`, the service is still using the example placeholder. In Railway, open the service's **Variables**, set `TELEGRAM_BOT_TOKEN` to the actual token from @BotFather (not the example text), save, and redeploy. Do not paste the token into GitHub or chat. The app now rejects known placeholder values with a clear message and suppresses Telegram's token-bearing exception text.
+The service validates that the webhook URL is HTTPS and ends in `/webhook`; startup fails with a clear message if it is missing or malformed. If Telegram rejects the token, replace it in Railway Variables with the current BotFather token and redeploy. Never paste secrets into GitHub or chat.
 
 ## Local run
 
@@ -64,20 +61,16 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Fill in `.env`, then run:
+Fill in `.env`. Telegram requires a public HTTPS webhook, so local testing needs an HTTPS tunnel; set `TELEGRAM_WEBHOOK_URL` to its public `/webhook` URL. Then run:
 
 ```bash
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
-A local server is not reachable by Telegram. For local bot testing, use an HTTPS tunnel and configure `TELEGRAM_WEBHOOK_URL` with its public `/webhook` URL. `/health` should return `{"status":"ok","service":"Mo-football"}`.
+`/health` reports whether webhook startup completed. A local server without a public HTTPS tunnel cannot receive Telegram messages.
 
 ## Storage and analysis notes
 
 The default database and photos are stored below `data/`. On Railway, mount persistent storage at `/app/data` and set the paths above. Image OCR extracts text only; it does not automatically verify fixtures. Confirm team names and run `/analyze` yourself.
 
 The model uses a simple Poisson estimate from recent goals. It is not a professional predictive model, does not include injuries or lineups, and does not guarantee a match result or profit. Respect data-provider terms and local laws.
-
-## License
-
-Starter software; adapt as needed. Check the terms of any data provider you use.
