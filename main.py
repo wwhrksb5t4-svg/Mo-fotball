@@ -11,13 +11,21 @@ from app.db import init_db
 from app.telegram_bot import build_application
 
 logging.basicConfig(level=logging.INFO)
-# python-telegram-bot uses httpx; its INFO request logs include the bot token in URL paths.
+# Telegram API URLs include the bot token; never emit them in routine logs.
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("mo_football")
 
 
 async def telegram_error_handler(update: object, context) -> None:
-    logger.error("Telegram update handler failed", exc_info=context.error)
+    error = context.error
+    if error:
+        logger.error(
+            "Telegram update handler failed: %s",
+            type(error).__name__,
+            exc_info=(type(error), error, error.__traceback__),
+        )
+    else:
+        logger.error("Telegram update handler failed with an unknown error")
 
 
 @asynccontextmanager
@@ -49,7 +57,12 @@ async def lifespan(app: FastAPI):
         started = True
         app.state.telegram_app = telegram_app
         app.state.webhook_ready = True
-        logger.info("Mo-football webhook configured and ready")
+        logger.info(
+            "Webhook ready; registered handler groups=%s; pending updates=%s; last Telegram delivery error=%s",
+            len(telegram_app.handlers),
+            info.pending_update_count,
+            info.last_error_message or "none",
+        )
         yield
     finally:
         app.state.webhook_ready = False
@@ -77,15 +90,30 @@ async def webhook(
     if TELEGRAM_WEBHOOK_SECRET and not hmac.compare_digest(
         x_telegram_bot_api_secret_token or "", TELEGRAM_WEBHOOK_SECRET
     ):
+        logger.warning("Rejected Telegram webhook request: secret check failed")
         raise HTTPException(status_code=403, detail="Invalid webhook secret")
 
     telegram_app = getattr(request.app.state, "telegram_app", None)
     if telegram_app is None:
+        logger.error("Rejected Telegram webhook request: bot application is not ready")
         raise HTTPException(status_code=503, detail="Telegram bot is not ready")
     try:
         payload = await request.json()
         update = Update.de_json(payload, telegram_app.bot)
+        if update is None:
+            raise ValueError("empty update")
+        kind = "message"
+        if update.message and update.message.text:
+            # Log command name only; never log message text, usernames, or payloads.
+            kind = update.message.text.split(maxsplit=1)[0].split("@", 1)[0]
+        elif update.callback_query:
+            kind = "callback_query"
+        logger.info("Received Telegram update id=%s type=%s", update.update_id, kind)
         await telegram_app.process_update(update)
     except (ValueError, TypeError):
+        logger.exception("Invalid Telegram webhook payload")
         raise HTTPException(status_code=400, detail="Invalid Telegram update payload") from None
+    except Exception:
+        logger.exception("Failed to process Telegram webhook update")
+        raise HTTPException(status_code=500, detail="Failed to process Telegram update") from None
     return {"ok": True}
