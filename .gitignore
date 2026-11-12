@@ -1,0 +1,12 @@
+# Ignore local environment and generated files
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+.DS_Store
+*.sqlite3
+*.db
+*.log
+/data/
